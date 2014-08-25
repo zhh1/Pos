@@ -1,109 +1,66 @@
 function BoughtItems(input,all_items,free_items) {
-    this.input = input;
-    this.all_items = all_items;
-    this.free_items = free_items;
+    this.boughtItems = {};
+    this.count_items(input,all_items);
+    this.count_free_items(free_items);
 }
 
 //统计每件物品的数量
-BoughtItems.prototype.count_items = function() {
-    for (var i = 0; i < this.all_items.length; i++) {
-        for (var j = 0; j < this.input.length; j++) {
-            if (this.input[j].search(/-/) == 10) {
-                if (this.input[j].substr(0, 10) == this.all_items[i].barcode) {
-                    this.all_items[i].count = parseInt(this.input[j].substr(11));
-                }
-            }
-            else {
-                if (this.input[j] == this.all_items[i].barcode) {
-                    this.all_items[i].count++;
-                }
-            }
-        }
-    }
-};
-
-//将买了的物品提取出来
-BoughtItems.prototype.get_bought_items = function() {
-    var bought_items = [];
-    for(var i = 0;i < this.all_items.length; i++) {
-        if(this.all_items[i].count) {
-            bought_items.push(this.all_items[i]);
-        }
-    }
-    return bought_items;
+BoughtItems.prototype.count_items = function(input,all_items) {
+    _(input).each(function (raw) {
+        var barcode = raw.substring(0,10);
+        var number = parseInt(raw.substring(11)) || 1;
+        var item = this.boughtItems[barcode] || _(all_items).findWhere({barcode: barcode});
+        item.count += number;
+        this.boughtItems[barcode] = item;
+    }, this);
 };
 
 //将买了的物品中的优惠的物品状态改为free
-BoughtItems.prototype.get_free_items_in_bought = function(bought_items) {
-    for(var i = 0;i < this.free_items[0].barcodes.length;i++) {
-        for(var j = 0;j < bought_items.length;j++) {
-            if(bought_items[j].barcode == this.free_items[0].barcodes[i]) {
-                bought_items[j].status = "free";
-            }
+BoughtItems.prototype.count_free_items = function(free_items) {
+    _(free_items[0].barcodes).each(function (barcode) {
+        if(this.boughtItems[barcode]) {
+            this.boughtItems[barcode].status = true;
         }
-    }
-//    return bought_items;
+    }, this);
+
+    _(this.boughtItems).each(function (item) {
+        if(item.status) {
+            item.free = Math.floor(item.count / 3);
+        }
+    }, this);
 };
 
 //各个物品各自应该打印的内容
-BoughtItems.prototype.get_items_text = function (bought) {
-    var items_text = [];
-    for(var i = 0 ; i < bought.length ;i++) {
-        if (bought[i].status == "free") {
-            var free_count = parseInt(bought[i].count / 3);
-
-            items_text[i] = "名称：" + bought[i].name + "，数量：" + bought[i].count + bought[i].unit + "，单价："
-                + (bought[i].price).toFixed(2) + "(元)，小计：" + (bought[i].price * (bought[i].count - free_count)).toFixed(2)
+BoughtItems.prototype.get_bought_items = function () {
+    var result = '';
+    _(this.boughtItems).each(function (item) {
+        result += "名称：" + item.name + "，数量：" + item.count + item.unit + "，单价："
+                + item.price.toFixed(2) + "(元)，小计：" + (item.price * (item.count - item.free)).toFixed(2)
                 + "(元)\n";
-        }
-        else {
-            items_text[i] = "名称：" + bought[i].name + "，数量：" + bought[i].count + bought[i].unit + "，单价："
-                + (bought[i].price).toFixed(2) + "(元)，小计：" + (bought[i].price * bought[i].count).toFixed(2)
-                + "(元)\n";
-        }
-    }
-    return items_text;
+    });
+    return result;
 };
 
-
 //获取顾客购买的商品里优惠的商品的名称和数量
-BoughtItems.prototype.get_free_items_text = function (bought) {
-    var free_items_text = [];
-    var j = 0;
-    for(var i = 0 ; i < bought.length ;i++) {
-        if (bought[i].status == "free" && bought[i].count > 1) {
-            var free_count = parseInt(bought[i].count/3);
-            free_items_text[j++] = "名称：" + bought[i].name + "，数量：" + free_count + bought[i].unit + "\n";
+BoughtItems.prototype.get_free_items = function () {
+    var result = '';
+    _(this.boughtItems).each(function (item) {
+        if(item.status) {
+            result += "名称：" + item.name + "，数量：" + item.free + item.unit + '\n';
         }
-    }
-    return free_items_text;
+    });
+    return result;
 };
 
 //得到商品总共要付的钱
-BoughtItems.prototype.get_sum_price = function (bought) {
-    var sum = 0 , free_sum = 0 ,no_free_sum = 0 , free = 0;
-    for(var i = 0 ; i < bought.length ;i++) {
-        if (bought[i].status == "free") {
-            var free_count = parseInt(bought[i].count/3);
-            free_sum = free_sum + bought[i].price * (bought[i].count-free_count);
-        }
-        else {
-            no_free_sum = no_free_sum + bought[i].price * bought[i].count;
-        }
-    }
-    return sum = free_sum + no_free_sum;
-};
-
-//得到优惠的价钱
-BoughtItems.prototype.get_free = function(bought) {
-    var free = 0;
-    for(var i = 0 ; i < bought.length ;i++) {
-        if (bought[i].status == "free" && bought[i].count > 1) {
-            var free_count = parseInt(bought[i].count/3);
-            free = free + bought[i].price*free_count;
-        }
-    }
-    return free;
+BoughtItems.prototype.get_sum_price = function () {
+    return '总计：' +
+        _(this.boughtItems).reduce(function (sum, item){
+            return sum + item.price * (item.count - item.free);
+        }, 0, this).toFixed(2) + '(元)\n' + '节省：' +
+        _(this.boughtItems).reduce(function (sum, item){
+            return sum + item.price * item.free;
+        }, 0, this).toFixed(2) + '(元)\n';
 };
 
 //获取打印时的时间
@@ -123,22 +80,17 @@ BoughtItems.prototype.get_time = function() {
     return formattedDateString;
 };
 
-
 //得到需要打印的内容
-BoughtItems.prototype.print_text = function(formattedDateString,item_text,free_item_text,sum,free) {
-    var print_all_text =
+BoughtItems.prototype.print_text = function() {
+    return '' +
         '***<没钱赚商店>购物清单***\n' +
-        '打印时间：' + formattedDateString + '\n' +
+        '打印时间：' + this.get_time() + '\n' +
         '----------------------\n' +
-        item_text.join("") +
+        this.get_bought_items() +
         '----------------------\n' +
         '挥泪赠送商品：\n' +
-        free_item_text.join("") +
+        this.get_free_items() +
         '----------------------\n' +
-        '总计：' + sum.toFixed(2) + '(元)\n' +
-        '节省：' + free.toFixed(2) + '(元)\n' +
+        this.get_sum_price() +
         '**********************';
-
-    return print_all_text;
-
 };
